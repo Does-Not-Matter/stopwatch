@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stopwatch</title>
+  <style>
+    :root {
+      --bg: #09090b;
+      --card-bg: #121215;
+      --border: #27272a;
+      --text: #f4f4f5;
+      --muted: #71717a;
+      --accent-green: #22c55e;
+      --accent-red: #ef4444;
+      --accent-blue: #3b82f6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 32px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .user-label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .time-display {
+      font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
+      font-size: 3rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin: 10px 0 20px;
+      color: #fafafa;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    button {
+      font-family: inherit;
+      font-size: 0.85rem;
+      font-weight: 600;
+      padding: 10px 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #18181b;
+      color: var(--text);
+      cursor: pointer;
+      transition: opacity 0.15s, background 0.15s;
+    }
+
+    button:hover { opacity: 0.85; }
+    button:active { transform: scale(0.98); }
+
+    .btn-start { background: var(--accent-green); color: #000; border: none; }
+    .btn-stop { background: var(--accent-red); color: #fff; border: none; }
+    .btn-save { background: var(--accent-blue); color: #fff; border: none; }
+
+    /* Saved History Section */
+    .history-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+    }
+
+    .history-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+
+    .history-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 12px;
+      background: #18181b;
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+
+    .history-item .name { font-weight: 600; }
+    .history-item .duration { font-family: monospace; font-weight: 600; color: #a1a1aa; }
+    .history-item .timestamp { font-size: 0.75rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- User A -->
+    <div class="card">
+      <div class="user-label">Person 1</div>
+      <div class="time-display" id="time-userA">00:00:00</div>
+      <div class="controls">
+        <button class="btn-start" onclick="start('userA')">Start</button>
+        <button class="btn-stop" onclick="stop('userA')">Stop</button>
+        <button onclick="reset('userA')">Reset</button>
+        <button class="btn-save" onclick="save('userA', 'Person 1')">Log</button>
+      </div>
+    </div>
+
+    <!-- User B -->
+    <div class="card">
+      <div class="user-label">Person 2</div>
+      <div class="time-display" id="time-userB">00:00:00</div>
+      <div class="controls">
+        <button class="btn-start" onclick="start('userB')">Start</button>
+        <button class="btn-stop" onclick="stop('userB')">Stop</button>
+        <button onclick="reset('userB')">Reset</button>
+        <button class="btn-save" onclick="save('userB', 'Person 2')">Log</button>
+      </div>
+    </div>
+
+    <!-- History -->
+    <div class="history-card">
+      <div class="history-title">Saved Logs</div>
+      <div class="history-list" id="history-container">
+        <div style="font-size: 0.85rem; color: var(--muted); text-align: center; padding: 12px;">No logged times yet</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <script>
+    // Paste your Firebase config here
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID"
+    };
+
+    if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    const timers = {
+      userA: { running: false, start: 0, accumulated: 0, interval: null },
+      userB: { running: false, start: 0, accumulated: 0, interval: null }
+    };
+
+    function formatTime(ms) {
+      const totalSec = Math.floor(ms / 1000);
+      const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
+      const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
+      const s = String(totalSec % 60).padStart(2, '0');
+      return `${h}:${m}:${s}`;
+    }
+
+    function runTick(user) {
+      clearInterval(timers[user].interval);
+      timers[user].interval = setInterval(() => {
+        let total = timers[user].accumulated;
+        if (timers[user].running) total += Date.now() - timers[user].start;
+        document.getElementById(`time-${user}`).innerText = formatTime(total);
+      }, 500);
+    }
+
+    // Realtime listeners
+    ['userA', 'userB'].forEach(user => {
+      db.ref(`timers/${user}`).on('value', snap => {
+        const val = snap.val() || { running: false, start: 0, accumulated: 0 };
+        timers[user].running = val.running;
+        timers[user].start = val.start;
+        timers[user].accumulated = val.accumulated;
+
+        let total = val.accumulated;
+        if (val.running) {
+          total += Date.now() - val.start;
+          runTick(user);
+        } else {
+          clearInterval(timers[user].interval);
+          document.getElementById(`time-${user}`).innerText = formatTime(total);
+        }
+      });
+    });
+
+    // History listener
+    db.ref('history').limitToLast(20).on('value', snap => {
+      const container = document.getElementById('history-container');
+      const data = snap.val();
+      if (!data) {
+        container.innerHTML = '<div style="font-size: 0.85rem; color: var(--muted); text-align: center; padding: 12px;">No logged times yet</div>';
+        return;
+      }
+
+      container.innerHTML = '';
+      Object.values(data).reverse().forEach(row => {
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        item.innerHTML = `
+          <div><span class="name">${row.name}</span> <span class="timestamp">${row.date}</span></div>
+          <div class="duration">${row.duration}</div>
+        `;
+        container.appendChild(item);
+      });
+    });
+
+    // Controls
+    function start(user) {
+      if (timers[user].running) return;
+      db.ref(`timers/${user}`).set({
+        running: true,
+        start: Date.now(),
+        accumulated: timers[user].accumulated
+      });
+    }
+
+    function stop(user) {
+      if (!timers[user].running) return;
+      const elapsed = Date.now() - timers[user].start;
+      db.ref(`timers/${user}`).set({
+        running: false,
+        start: 0,
+        accumulated: timers[user].accumulated + elapsed
+      });
+    }
+
+    function reset(user) {
+      db.ref(`timers/${user}`).set({ running: false, start: 0, accumulated: 0 });
+    }
+
+    function save(user, name) {
+      let total = timers[user].accumulated;
+      if (timers[user].running) total += Date.now() - timers[user].start;
+      if (total <= 0) return;
+
+      db.ref('history').push({
+        name: name,
+        duration: formatTime(total),
+        date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+    }
+  </script>
+</body>
+</html>
