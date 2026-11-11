@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Stopwatch</title>
+  <title>stopwatch4two</title>
   <style>
     :root {
       --bg: #09090b;
@@ -33,6 +33,16 @@
       display: flex;
       flex-direction: column;
       gap: 20px;
+    }
+
+    .app-header {
+      text-align: center;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: -4px;
     }
 
     .card {
@@ -153,6 +163,8 @@
 <body>
 
   <div class="container">
+    <div class="app-header">stopwatch4two</div>
+
     <!-- Pratishtha -->
     <div class="card">
       <div class="user-label">Pratishtha</div>
@@ -241,13 +253,11 @@
 
         let total = val.accumulated;
         if (val.running) {
-          // Illuminate green dot when active
           dot.classList.add('active');
           dot.setAttribute('title', 'Status: Running');
           total += Date.now() - val.start;
           runTick(user);
         } else {
-          // Dim dot when stopped or paused
           dot.classList.remove('active');
           dot.setAttribute('title', 'Status: Off');
           clearInterval(timers[user].interval);
@@ -307,14 +317,12 @@
       if (timers[user].running) total += Date.now() - timers[user].start;
       if (total <= 0) return;
 
-      // 1. Push record to history
       db.ref('history').push({
         name: name,
         duration: formatTime(total),
         date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
 
-      // 2. Automatically reset back to zero
       db.ref(`timers/${user}`).set({
         running: false,
         start: 0,
