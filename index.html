@@ -198,10 +198,10 @@
   <script>
     // Paste your Firebase config here
     const firebaseConfig = {
-      apiKey: "YOUR_API_KEY",
-      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-      projectId: "YOUR_PROJECT_ID"
+      apiKey: "AIzaSyAG8e7n7-fH1KfY8jDGZ1sdXQmfilXwE9k",
+      authDomain: "stopwatch4two.firebaseapp.com",
+      databaseURL: "https://stopwatch4two-default-rtdb.firebaseio.com",
+      projectId: "stopwatch4two"
     };
 
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
@@ -302,37 +302,23 @@
     }
 
     // Save duration & automatically reset stopwatch to 00:00:00
-    // Save duration & automatically reset stopwatch ONLY after successful save
     function save(user, name) {
       let total = timers[user].accumulated;
       if (timers[user].running) total += Date.now() - timers[user].start;
-    
-      // Don't log if the timer is at zero
-      if (total <= 0) {
-        alert("Timer is at 00:00:00 — start the timer before logging.");
-        return;
-      }
-    
-      const durationFormatted = formatTime(total);
-      const currentTime = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    
-      // 1. Push record to Firebase history
+      if (total <= 0) return;
+
+      // 1. Push record to history
       db.ref('history').push({
         name: name,
-        duration: durationFormatted,
-        date: currentTime
-      })
-      .then(() => {
-        // 2. ONLY reset after Firebase confirms the log was saved
-        db.ref(`timers/${user}`).set({
-          running: false,
-          start: 0,
-          accumulated: 0
-        });
-      })
-      .catch((error) => {
-        console.error("Firebase save failed:", error);
-        alert("Failed to save log: " + error.message);
+        duration: formatTime(total),
+        date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+
+      // 2. Automatically reset back to zero
+      db.ref(`timers/${user}`).set({
+        running: false,
+        start: 0,
+        accumulated: 0
       });
     }
   </script>
