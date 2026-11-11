@@ -44,7 +44,7 @@
     }
 
     .user-label {
-      font-size: 0.85rem;
+      font-size: 0.95rem;
       font-weight: 600;
       letter-spacing: 0.05em;
       text-transform: uppercase;
@@ -131,7 +131,7 @@
 <body>
 
   <div class="container">
-    <!-- User A -->
+    <!-- Pratishtha -->
     <div class="card">
       <div class="user-label">Pratishtha</div>
       <div class="time-display" id="time-userA">00:00:00</div>
@@ -139,11 +139,11 @@
         <button class="btn-start" onclick="start('userA')">Start</button>
         <button class="btn-stop" onclick="stop('userA')">Stop</button>
         <button onclick="reset('userA')">Reset</button>
-        <button class="btn-save" onclick="save('userA', 'Person 1')">Log</button>
+        <button class="btn-save" onclick="save('userA', 'Pratishtha')">Log</button>
       </div>
     </div>
 
-    <!-- User B -->
+    <!-- Abhi -->
     <div class="card">
       <div class="user-label">Abhi</div>
       <div class="time-display" id="time-userB">00:00:00</div>
@@ -151,7 +151,7 @@
         <button class="btn-start" onclick="start('userB')">Start</button>
         <button class="btn-stop" onclick="stop('userB')">Stop</button>
         <button onclick="reset('userB')">Reset</button>
-        <button class="btn-save" onclick="save('userB', 'Person 2')">Log</button>
+        <button class="btn-save" onclick="save('userB', 'Abhi')">Log</button>
       </div>
     </div>
 
@@ -170,10 +170,10 @@
   <script>
     // Paste your Firebase config here
     const firebaseConfig = {
-      apiKey: "AIzaSyAG8e7n7-fH1KfY8jDGZ1sdXQmfilXwE9k",
-      authDomain: "stopwatch4two.firebaseapp.com",
-      databaseURL: "https://stopwatch4two-default-rtdb.firebaseio.com",
-      projectId: "stopwatch4two"
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID"
     };
 
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
