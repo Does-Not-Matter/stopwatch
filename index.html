@@ -52,13 +52,35 @@
       margin-bottom: 12px;
     }
 
+    /* Stopwatch & Status Indicator Layout */
+    .time-display-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      margin: 10px 0 20px;
+    }
+
     .time-display {
       font-family: "SF Mono", Monaco, "Cascadia Code", monospace;
       font-size: 3rem;
       font-weight: 700;
       letter-spacing: 0.02em;
-      margin: 10px 0 20px;
       color: #fafafa;
+    }
+
+    .status-dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background-color: #27272a;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      transition: background-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .status-dot.active {
+      background-color: var(--accent-green);
+      box-shadow: 0 0 12px var(--accent-green);
     }
 
     .controls {
@@ -134,7 +156,10 @@
     <!-- Pratishtha -->
     <div class="card">
       <div class="user-label">Pratishtha</div>
-      <div class="time-display" id="time-userA">00:00:00</div>
+      <div class="time-display-container">
+        <div class="time-display" id="time-userA">00:00:00</div>
+        <div class="status-dot" id="dot-userA" title="Status: Off"></div>
+      </div>
       <div class="controls">
         <button class="btn-start" onclick="start('userA')">Start</button>
         <button class="btn-stop" onclick="stop('userA')">Stop</button>
@@ -146,7 +171,10 @@
     <!-- Abhi -->
     <div class="card">
       <div class="user-label">Abhi</div>
-      <div class="time-display" id="time-userB">00:00:00</div>
+      <div class="time-display-container">
+        <div class="time-display" id="time-userB">00:00:00</div>
+        <div class="status-dot" id="dot-userB" title="Status: Off"></div>
+      </div>
       <div class="controls">
         <button class="btn-start" onclick="start('userB')">Start</button>
         <button class="btn-stop" onclick="stop('userB')">Stop</button>
@@ -209,11 +237,19 @@
         timers[user].start = val.start;
         timers[user].accumulated = val.accumulated;
 
+        const dot = document.getElementById(`dot-${user}`);
+
         let total = val.accumulated;
         if (val.running) {
+          // Illuminate green dot when active
+          dot.classList.add('active');
+          dot.setAttribute('title', 'Status: Running');
           total += Date.now() - val.start;
           runTick(user);
         } else {
+          // Dim dot when stopped or paused
+          dot.classList.remove('active');
+          dot.setAttribute('title', 'Status: Off');
           clearInterval(timers[user].interval);
           document.getElementById(`time-${user}`).innerText = formatTime(total);
         }
@@ -265,15 +301,24 @@
       db.ref(`timers/${user}`).set({ running: false, start: 0, accumulated: 0 });
     }
 
+    // Save duration & automatically reset stopwatch to 00:00:00
     function save(user, name) {
       let total = timers[user].accumulated;
       if (timers[user].running) total += Date.now() - timers[user].start;
       if (total <= 0) return;
 
+      // 1. Push record to history
       db.ref('history').push({
         name: name,
         duration: formatTime(total),
         date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      });
+
+      // 2. Automatically reset back to zero
+      db.ref(`timers/${user}`).set({
+        running: false,
+        start: 0,
+        accumulated: 0
       });
     }
   </script>
