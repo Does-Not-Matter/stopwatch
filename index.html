@@ -224,9 +224,11 @@
     const db = firebase.database();
 
     const timers = {
-      userA: { running: false, start: 0, accumulated: 0, interval: null },
-      userB: { running: false, start: 0, accumulated: 0, interval: null }
+      userA: { running: false, start: 0, accumulated: 0 },
+      userB: { running: false, start: 0, accumulated: 0 }
     };
+
+    let rafId = null;
 
     function formatTime(ms) {
       const totalSec = Math.floor(ms / 1000);
@@ -236,13 +238,29 @@
       return `${h}:${m}:${s}`;
     }
 
-    function runTick(user) {
-      clearInterval(timers[user].interval);
-      timers[user].interval = setInterval(() => {
+    // Single unified loop updating both stopwatches in the exact same frame
+    function renderLoop() {
+      const now = Date.now();
+      let anyRunning = false;
+
+      ['userA', 'userB'].forEach(user => {
         let total = timers[user].accumulated;
-        if (timers[user].running) total += Date.now() - timers[user].start;
-        document.getElementById(`time-${user}`).innerText = formatTime(total);
-      }, 500);
+        if (timers[user].running) {
+          anyRunning = true;
+          total += Math.max(0, now - timers[user].start);
+        }
+        const el = document.getElementById(`time-${user}`);
+        const formatted = formatTime(total);
+        if (el.innerText !== formatted) {
+          el.innerText = formatted;
+        }
+      });
+
+      if (anyRunning) {
+        rafId = requestAnimationFrame(renderLoop);
+      } else {
+        rafId = null;
+      }
     }
 
     ['userA', 'userB'].forEach(user => {
@@ -254,17 +272,16 @@
 
         const dot = document.getElementById(`dot-${user}`);
 
-        let total = val.accumulated;
         if (val.running) {
           dot.classList.add('active');
           dot.setAttribute('title', 'Status: Running');
-          total += Date.now() - val.start;
-          runTick(user);
+          if (!rafId) {
+            rafId = requestAnimationFrame(renderLoop);
+          }
         } else {
           dot.classList.remove('active');
           dot.setAttribute('title', 'Status: Off');
-          clearInterval(timers[user].interval);
-          document.getElementById(`time-${user}`).innerText = formatTime(total);
+          document.getElementById(`time-${user}`).innerText = formatTime(val.accumulated);
         }
       });
     });
@@ -291,16 +308,21 @@
 
     function start(user) {
       if (timers[user].running) return;
+      const now = Date.now();
+      const acc = timers[user].accumulated;
+      // Snap start phase to a whole-second boundary so both timers flip digits together
+      const alignedStart = Math.round((now - acc) / 1000) * 1000 + acc;
+
       db.ref(`timers/${user}`).set({
         running: true,
-        start: Date.now(),
-        accumulated: timers[user].accumulated
+        start: alignedStart,
+        accumulated: acc
       });
     }
 
     function stop(user) {
       if (!timers[user].running) return;
-      const elapsed = Date.now() - timers[user].start;
+      const elapsed = Math.max(0, Date.now() - timers[user].start);
       db.ref(`timers/${user}`).set({
         running: false,
         start: 0,
@@ -314,7 +336,7 @@
 
     function save(user, name) {
       let total = timers[user].accumulated;
-      if (timers[user].running) total += Date.now() - timers[user].start;
+      if (timers[user].running) total += Math.max(0, Date.now() - timers[user].start);
       if (total <= 0) return;
 
       db.ref('history').push({
