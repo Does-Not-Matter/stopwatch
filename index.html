@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>stopwatch4two</title>
-  <!-- Google Fonts for consistent look across Android, iOS & Desktop -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@700&family=Dancing+Script:wght@600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
@@ -212,7 +211,7 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script>
-    // Paste your Firebase config here
+    // PASTE YOUR REAL FIREBASE CONFIG BELOW
     const firebaseConfig = {
       apiKey: "AIzaSyAG8e7n7-fH1KfY8jDGZ1sdXQmfilXwE9k",
       authDomain: "stopwatch4two.firebaseapp.com",
@@ -228,19 +227,28 @@
       userB: { running: false, start: 0, accumulated: 0 }
     };
 
+    let serverOffset = 0;
     let rafId = null;
 
+    // Sync local clock with Firebase server time so both devices align to the millisecond
+    db.ref('.info/serverTimeOffset').on('value', snap => {
+      serverOffset = snap.val() || 0;
+    });
+
+    function getServerNow() {
+      return Date.now() + serverOffset;
+    }
+
     function formatTime(ms) {
-      const totalSec = Math.floor(ms / 1000);
+      const totalSec = Math.floor(Math.max(0, ms) / 1000);
       const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
       const m = String(Math.floor((totalSec % 3600) / 60)).padStart(2, '0');
       const s = String(totalSec % 60).padStart(2, '0');
       return `${h}:${m}:${s}`;
     }
 
-    // Single unified loop updating both stopwatches in the exact same frame
     function renderLoop() {
-      const now = Date.now();
+      const now = getServerNow();
       let anyRunning = false;
 
       ['userA', 'userB'].forEach(user => {
@@ -308,10 +316,10 @@
 
     function start(user) {
       if (timers[user].running) return;
-      const now = Date.now();
+      const now = getServerNow();
       const acc = timers[user].accumulated;
-      // Snap start phase to a whole-second boundary so both timers flip digits together
-      const alignedStart = Math.round((now - acc) / 1000) * 1000 + acc;
+      // Align phase downward so total crosses every 1000ms mark on the exact same server second
+      const alignedStart = Math.floor((now - acc) / 1000) * 1000 + acc;
 
       db.ref(`timers/${user}`).set({
         running: true,
@@ -322,7 +330,7 @@
 
     function stop(user) {
       if (!timers[user].running) return;
-      const elapsed = Math.max(0, Date.now() - timers[user].start);
+      const elapsed = Math.max(0, getServerNow() - timers[user].start);
       db.ref(`timers/${user}`).set({
         running: false,
         start: 0,
@@ -336,7 +344,7 @@
 
     function save(user, name) {
       let total = timers[user].accumulated;
-      if (timers[user].running) total += Math.max(0, Date.now() - timers[user].start);
+      if (timers[user].running) total += Math.max(0, getServerNow() - timers[user].start);
       if (total <= 0) return;
 
       db.ref('history').push({
