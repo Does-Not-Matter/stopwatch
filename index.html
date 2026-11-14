@@ -6,7 +6,7 @@
   <title>stopwatch4two</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@700&family=Dancing+Script:wght@600&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@700&family=Dancing+Script:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
   <style>
     :root {
@@ -18,6 +18,8 @@
       --accent-green: #22c55e;
       --accent-red: #ef4444;
       --accent-blue: #3b82f6;
+      --glow-color: rgba(167, 139, 250, 0.22);
+      --glow-text: #e9d5ff;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -46,7 +48,70 @@
       font-weight: 600;
       color: var(--text);
       letter-spacing: 0.02em;
-      margin-bottom: -4px;
+      margin-bottom: -6px;
+    }
+
+    /* Illuminated Notes Area at Top */
+    .notes-stage {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .notes-stage:empty {
+      display: none;
+    }
+
+    .illuminated-note {
+      position: relative;
+      padding: 12px 18px;
+      border-radius: 14px;
+      background: radial-gradient(circle at center, rgba(139, 92, 246, 0.16) 0%, rgba(18, 18, 21, 0.9) 100%);
+      border: 1px solid rgba(167, 139, 250, 0.35);
+      box-shadow: 0 0 24px var(--glow-color), inset 0 0 12px rgba(167, 139, 250, 0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      animation: pulseGlow 4s ease-in-out infinite;
+    }
+
+    @keyframes pulseGlow {
+      0%, 100% { box-shadow: 0 0 20px rgba(167, 139, 250, 0.18), inset 0 0 10px rgba(167, 139, 250, 0.06); }
+      50% { box-shadow: 0 0 30px rgba(167, 139, 250, 0.32), inset 0 0 16px rgba(167, 139, 250, 0.12); }
+    }
+
+    .note-content {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .note-author {
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #a78bfa;
+      flex-shrink: 0;
+    }
+
+    .note-text {
+      font-size: 1rem;
+      font-weight: 500;
+      color: var(--glow-text);
+      text-shadow: 0 0 12px rgba(216, 180, 254, 0.55);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .note-timer {
+      font-family: 'Chivo Mono', monospace;
+      font-size: 0.72rem;
+      color: #a1a1aa;
+      flex-shrink: 0;
     }
 
     .card {
@@ -117,12 +182,52 @@
       transition: opacity 0.15s, background 0.15s;
     }
 
-    button:hover { opacity: 0.85; }
-    button:active { transform: scale(0.98); }
+    button:hover:not(:disabled) { opacity: 0.85; }
+    button:active:not(:disabled) { transform: scale(0.98); }
+    button:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .btn-start { background: var(--accent-green); color: #000; border: none; }
     .btn-stop { background: var(--accent-red); color: #fff; border: none; }
     .btn-save { background: var(--accent-blue); color: #fff; border: none; }
+
+    /* Compact Note Input Row inside each Card */
+    .note-input-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 18px;
+      padding-top: 16px;
+      border-top: 1px solid #1f1f23;
+    }
+
+    .note-input {
+      flex: 1;
+      min-width: 0;
+      background: #18181b;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .note-input:focus {
+      border-color: #7c3aed;
+    }
+
+    .note-input:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn-note {
+      padding: 8px 14px;
+      font-size: 0.8rem;
+      background: #27272a;
+      border: 1px solid #3f3f46;
+    }
 
     .history-card {
       background: var(--card-bg);
@@ -168,6 +273,9 @@
   <div class="container">
     <h1 class="app-title">stopwatch4two</h1>
 
+    <!-- Illuminated Active Notes Banner -->
+    <div class="notes-stage" id="notes-stage"></div>
+
     <!-- Pratishtha -->
     <div class="card">
       <div class="user-label">Pratishtha</div>
@@ -181,6 +289,10 @@
         <button onclick="reset('userA')">Reset</button>
         <button class="btn-save" onclick="save('userA', 'Pratishtha')">Log</button>
       </div>
+      <form class="note-input-row" onsubmit="sendNote(event, 'userA', 'Pratishtha')">
+        <input type="text" class="note-input" id="input-userA" maxlength="25" placeholder="Drop a 30m note (25 max)..." autocomplete="off">
+        <button type="submit" class="btn-note" id="btn-note-userA">Send</button>
+      </form>
     </div>
 
     <!-- Abhi -->
@@ -196,6 +308,10 @@
         <button onclick="reset('userB')">Reset</button>
         <button class="btn-save" onclick="save('userB', 'Abhi')">Log</button>
       </div>
+      <form class="note-input-row" onsubmit="sendNote(event, 'userB', 'Abhi')">
+        <input type="text" class="note-input" id="input-userB" maxlength="25" placeholder="Drop a 30m note (25 max)..." autocomplete="off">
+        <button type="submit" class="btn-note" id="btn-note-userB">Send</button>
+      </form>
     </div>
 
     <!-- History -->
@@ -227,12 +343,18 @@
       userB: { running: false, start: 0, accumulated: 0 }
     };
 
+    const activeNotes = {
+      userA: null,
+      userB: null
+    };
+
+    const NOTE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
     let serverOffset = 0;
     let rafId = null;
 
-    // Sync local clock with Firebase server time so both devices align to the millisecond
     db.ref('.info/serverTimeOffset').on('value', snap => {
       serverOffset = snap.val() || 0;
+      updateNotesUI();
     });
 
     function getServerNow() {
@@ -292,7 +414,94 @@
           document.getElementById(`time-${user}`).innerText = formatTime(val.accumulated);
         }
       });
+
+      // Listen for 30-minute illuminated notes
+      db.ref(`notes/${user}`).on('value', snap => {
+        activeNotes[user] = snap.val();
+        updateNotesUI();
+      });
     });
+
+    function updateNotesUI() {
+      const now = getServerNow();
+      const stage = document.getElementById('notes-stage');
+      stage.innerHTML = '';
+
+      ['userA', 'userB'].forEach(user => {
+        const note = activeNotes[user];
+        const input = document.getElementById(`input-${user}`);
+        const btn = document.getElementById(`btn-note-${user}`);
+
+        if (note && note.expiresAt > now) {
+          const remainingMs = note.expiresAt - now;
+          const minsLeft = Math.ceil(remainingMs / 60000);
+
+          // Lock input until current note expires
+          input.disabled = true;
+          btn.disabled = true;
+          input.placeholder = `Locked (${minsLeft}m left)`;
+
+          // Render illuminated note safely
+          const card = document.createElement('div');
+          card.className = 'illuminated-note';
+
+          const content = document.createElement('div');
+          content.className = 'note-content';
+
+          const author = document.createElement('span');
+          author.className = 'note-author';
+          author.textContent = note.name + ':';
+
+          const text = document.createElement('span');
+          text.className = 'note-text';
+          text.textContent = note.text;
+
+          const timer = document.createElement('span');
+          timer.className = 'note-timer';
+          timer.textContent = `${minsLeft}m`;
+
+          content.appendChild(author);
+          content.appendChild(text);
+          card.appendChild(content);
+          card.appendChild(timer);
+          stage.appendChild(card);
+        } else {
+          // Unlock input when expired or empty
+          input.disabled = false;
+          btn.disabled = false;
+          input.placeholder = 'Drop a 30m note (25 max)...';
+
+          // Clean up expired note in database if it still exists
+          if (note && note.expiresAt <= now) {
+            db.ref(`notes/${user}`).remove();
+          }
+        }
+      });
+    }
+
+    // Check note expiration every 5 seconds
+    setInterval(updateNotesUI, 5000);
+
+    function sendNote(event, user, name) {
+      event.preventDefault();
+      const now = getServerNow();
+
+      // Prevent sending if previous note hasn't expired
+      if (activeNotes[user] && activeNotes[user].expiresAt > now) return;
+
+      const input = document.getElementById(`input-${user}`);
+      // Safely slice up to 25 Unicode characters (handles emojis cleanly)
+      const raw = input.value.trim();
+      const text = Array.from(raw).slice(0, 25).join('');
+      if (!text) return;
+
+      input.value = '';
+      db.ref(`notes/${user}`).set({
+        name: name,
+        text: text,
+        expiresAt: now + NOTE_DURATION_MS
+      });
+    }
 
     db.ref('history').limitToLast(20).on('value', snap => {
       const container = document.getElementById('history-container');
@@ -318,7 +527,6 @@
       if (timers[user].running) return;
       const now = getServerNow();
       const acc = timers[user].accumulated;
-      // Align phase downward so total crosses every 1000ms mark on the exact same server second
       const alignedStart = Math.floor((now - acc) / 1000) * 1000 + acc;
 
       db.ref(`timers/${user}`).set({
