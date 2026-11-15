@@ -2,8 +2,20 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>stopwatch4two</title>
+
+  <!-- PWA & Home Screen App Configuration -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#09090b">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="stopwatch4two">
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="apple-touch-icon" href="icon.png">
+
+  <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@700&family=Dancing+Script:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -28,9 +40,10 @@
       color: var(--text);
       font-family: 'Inter', sans-serif;
       min-height: 100vh;
+      min-height: 100dvh;
       display: flex;
       justify-content: center;
-      padding: 32px 16px;
+      padding: max(32px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom));
     }
 
     .container {
@@ -348,7 +361,7 @@
       userB: null
     };
 
-    const NOTE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+    const NOTE_DURATION_MS = 30 * 60 * 1000;
     let serverOffset = 0;
     let rafId = null;
 
@@ -415,7 +428,6 @@
         }
       });
 
-      // Listen for 30-minute illuminated notes
       db.ref(`notes/${user}`).on('value', snap => {
         activeNotes[user] = snap.val();
         updateNotesUI();
@@ -436,12 +448,10 @@
           const remainingMs = note.expiresAt - now;
           const minsLeft = Math.ceil(remainingMs / 60000);
 
-          // Lock input until current note expires
           input.disabled = true;
           btn.disabled = true;
           input.placeholder = `Locked (${minsLeft}m left)`;
 
-          // Render illuminated note safely
           const card = document.createElement('div');
           card.className = 'illuminated-note';
 
@@ -466,12 +476,10 @@
           card.appendChild(timer);
           stage.appendChild(card);
         } else {
-          // Unlock input when expired or empty
           input.disabled = false;
           btn.disabled = false;
           input.placeholder = 'Drop a 30m note (25 max)...';
 
-          // Clean up expired note in database if it still exists
           if (note && note.expiresAt <= now) {
             db.ref(`notes/${user}`).remove();
           }
@@ -479,18 +487,15 @@
       });
     }
 
-    // Check note expiration every 5 seconds
     setInterval(updateNotesUI, 5000);
 
     function sendNote(event, user, name) {
       event.preventDefault();
       const now = getServerNow();
 
-      // Prevent sending if previous note hasn't expired
       if (activeNotes[user] && activeNotes[user].expiresAt > now) return;
 
       const input = document.getElementById(`input-${user}`);
-      // Safely slice up to 25 Unicode characters (handles emojis cleanly)
       const raw = input.value.trim();
       const text = Array.from(raw).slice(0, 25).join('');
       if (!text) return;
