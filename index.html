@@ -12,7 +12,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="stopwatch4two">
-  <link rel="icon" type="image/png" href="icon.png">
+  <link id="favicon" rel="icon" type="image/png" href="icon.png">
   <link rel="apple-touch-icon" href="icon.png">
 
   <!-- Google Fonts -->
@@ -340,6 +340,36 @@
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
   <script>
+    // Round the browser tab favicon without modifying the PWA app icon
+    (function roundFavicon() {
+      const img = new Image();
+      img.src = 'icon.png';
+      img.onload = () => {
+        const size = 64;
+        const radius = 16; // Corner roundness (adjust 12–32 for less/more rounding)
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        ctx.beginPath();
+        ctx.moveTo(radius, 0);
+        ctx.lineTo(size - radius, 0);
+        ctx.quadraticCurveTo(size, 0, size, radius);
+        ctx.lineTo(size, size - radius);
+        ctx.quadraticCurveTo(size, size, size - radius, size);
+        ctx.lineTo(radius, size);
+        ctx.quadraticCurveTo(0, size, 0, size - radius);
+        ctx.lineTo(0, radius);
+        ctx.quadraticCurveTo(0, 0, radius, 0);
+        ctx.closePath();
+        ctx.clip();
+
+        ctx.drawImage(img, 0, 0, size, size);
+        document.getElementById('favicon').href = canvas.toDataURL('image/png');
+      };
+    })();
+
     // PASTE YOUR REAL FIREBASE CONFIG BELOW
     const firebaseConfig = {
       apiKey: "AIzaSyAG8e7n7-fH1KfY8jDGZ1sdXQmfilXwE9k",
