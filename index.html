@@ -5,22 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>stopwatch4two</title>
 
-  <!-- PWA & Home Screen App Configuration -->
+  <!-- Android PWA & Home Screen App Configuration -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#09090b">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="stopwatch4two">
   <link id="favicon" rel="icon" type="image/png" href="icon.png">
-  <link rel="apple-touch-icon" href="icon.png">
 
-  <!-- Google Fonts -->
+  <!-- Google Fonts for consistent rendering on Android & Desktop -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chivo+Mono:wght@700&family=Dancing+Script:wght@600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 
   <style>
+    /* Core Dark Theme Variables */
     :root {
       --bg: #09090b;
       --card-bg: #121215;
@@ -64,7 +61,49 @@
       margin-bottom: -6px;
     }
 
-    /* Illuminated Notes Area at Top */
+    /* One-Time Notification Permission Prompt (Auto-hides forever once linked) */
+    .notify-prompt {
+      background: #18181b;
+      border: 1px solid #3f3f46;
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      font-size: 0.82rem;
+      color: #d4d4d8;
+    }
+
+    .notify-prompt.hidden {
+      display: none;
+    }
+
+    .notify-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .btn-link-user {
+      padding: 6px 10px;
+      font-size: 0.78rem;
+      background: rgba(139, 92, 246, 0.18);
+      border: 1px solid rgba(167, 139, 250, 0.4);
+      color: #e9d5ff;
+      border-radius: 6px;
+    }
+
+    .btn-dismiss {
+      padding: 4px 8px;
+      font-size: 0.85rem;
+      background: transparent;
+      border: none;
+      color: var(--muted);
+    }
+
+    /* Illuminated 30-Minute Notes Banner */
     .notes-stage {
       display: flex;
       flex-direction: column;
@@ -127,6 +166,7 @@
       flex-shrink: 0;
     }
 
+    /* Clean Stopwatch Cards (No extra icons) */
     .card {
       background: var(--card-bg);
       border: 1px solid var(--border);
@@ -161,6 +201,7 @@
       color: #fafafa;
     }
 
+    /* Live Green Status Indicator */
     .status-dot {
       width: 14px;
       height: 14px;
@@ -175,6 +216,7 @@
       box-shadow: 0 0 12px var(--accent-green);
     }
 
+    /* Stopwatch Action Buttons */
     .controls {
       display: flex;
       gap: 8px;
@@ -203,7 +245,7 @@
     .btn-stop { background: var(--accent-red); color: #fff; border: none; }
     .btn-save { background: var(--accent-blue); color: #fff; border: none; }
 
-    /* Compact Note Input Row inside each Card */
+    /* Compact 30-Minute Note Input Row */
     .note-input-row {
       display: flex;
       gap: 8px;
@@ -242,6 +284,7 @@
       border: 1px solid #3f3f46;
     }
 
+    /* Saved History Log Card */
     .history-card {
       background: var(--card-bg);
       border: 1px solid var(--border);
@@ -286,10 +329,20 @@
   <div class="container">
     <h1 class="app-title">stopwatch4two</h1>
 
-    <!-- Illuminated Active Notes Banner -->
+    <!-- One-time setup prompt: disappears permanently once this phone grants notification permission -->
+    <div class="notify-prompt hidden" id="notify-prompt">
+      <span>Enable note alerts for:</span>
+      <div class="notify-actions">
+        <button class="btn-link-user" onclick="setupNotifications('userA')">Pratishtha</button>
+        <button class="btn-link-user" onclick="setupNotifications('userB')">Abhi</button>
+        <button class="btn-dismiss" onclick="dismissPrompt()" title="Dismiss">✕</button>
+      </div>
+    </div>
+
+    <!-- Illuminated Active 30m Notes Banner -->
     <div class="notes-stage" id="notes-stage"></div>
 
-    <!-- Pratishtha -->
+    <!-- Pratishtha's Card -->
     <div class="card">
       <div class="user-label">Pratishtha</div>
       <div class="time-display-container">
@@ -308,7 +361,7 @@
       </form>
     </div>
 
-    <!-- Abhi -->
+    <!-- Abhi's Card -->
     <div class="card">
       <div class="user-label">Abhi</div>
       <div class="time-display-container">
@@ -327,7 +380,7 @@
       </form>
     </div>
 
-    <!-- History -->
+    <!-- Saved Logs Card -->
     <div class="history-card">
       <div class="history-title">Saved Logs</div>
       <div class="history-list" id="history-container">
@@ -336,22 +389,43 @@
     </div>
   </div>
 
+  <!-- Firebase App, Realtime Database, and Cloud Messaging SDKs -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
 
   <script>
-    // Round the browser tab favicon without modifying the PWA app icon
+    // =========================================================================
+    // 1. CONFIGURATION (PASTE YOUR REAL KEYS & CLOUDFLARE WORKER URL HERE)
+    // =========================================================================
+    const firebaseConfig = {
+      apiKey: "AIzaSyAG8e7n7-fH1KfY8jDGZ1sdXQmfilXwE9k",
+      authDomain: "stopwatch4two.firebaseapp.com",
+      databaseURL: "https://stopwatch4two-default-rtdb.firebaseio.com",
+      projectId: "stopwatch4two",
+      storageBucket: "stopwatch4two.firebasestorage.app",
+      messagingSenderId: "547414457103",
+      appId: "1:547414457103:web:9f470fc673e229f80cdc7a"
+    };
+
+    const VAPID_KEY = "BMuSPbcK5dWTE0l_w2eUlLw8_aW295VzTM9-mJVxhFQ7YuiYEtO6jvLEp3yguw0suqp-M--KmaT8OePSodB0pkQ";
+    const WORKER_URL = "https://stopwatch-push.abhishekbosegd.workers.dev/";
+
+    // =========================================================================
+    // 2. ROUNDED BROWSER TAB FAVICON (Keeps Android home screen icon unchanged)
+    // =========================================================================
     (function roundFavicon() {
       const img = new Image();
       img.src = 'icon.png';
       img.onload = () => {
         const size = 64;
-        const radius = 16; // Corner roundness (adjust 12–32 for less/more rounding)
+        const radius = 16;
         const canvas = document.createElement('canvas');
         canvas.width = size;
         canvas.height = size;
         const ctx = canvas.getContext('2d');
 
+        // Clip canvas into a rounded square
         ctx.beginPath();
         ctx.moveTo(radius, 0);
         ctx.lineTo(size - radius, 0);
@@ -370,17 +444,101 @@
       };
     })();
 
-    // PASTE YOUR REAL FIREBASE CONFIG BELOW
-    const firebaseConfig = {
-      apiKey: "AIzaSyAG8e7n7-fH1KfY8jDGZ1sdXQmfilXwE9k",
-      authDomain: "stopwatch4two.firebaseapp.com",
-      databaseURL: "https://stopwatch4two-default-rtdb.firebaseio.com",
-      projectId: "stopwatch4two"
-    };
-
+    // =========================================================================
+    // 3. FIREBASE & ANDROID PUSH NOTIFICATION SETUP (No permanent UI clutter)
+    // =========================================================================
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
+    const messaging = firebase.messaging();
 
+    let swRegistration = null;
+
+    // Register background service worker on GitHub Pages relative path
+    if ('serviceWorker' in navigator && 'Notification' in window) {
+      navigator.serviceWorker.register('./firebase-messaging-sw.js')
+        .then(async (reg) => {
+          swRegistration = reg;
+          await checkNotificationState();
+        })
+        .catch((err) => console.error('Service Worker error:', err));
+    }
+
+    // Show native system notification even if the app is currently open in foreground
+    messaging.onMessage((payload) => {
+      if (Notification.permission === 'granted' && payload.notification) {
+        new Notification(payload.notification.title, {
+          body: payload.notification.body,
+          icon: 'icon.png'
+        });
+      }
+    });
+
+    // Check if this Android device is already linked; only prompt inside the installed PWA app
+    async function checkNotificationState() {
+      const linkedUser = localStorage.getItem('linkedNotifyUser');
+      const dismissed = localStorage.getItem('notifyPromptDismissed');
+      const promptEl = document.getElementById('notify-prompt');
+
+      // Detect if opened fullscreen from the Android Home Screen icon (PWA standalone mode)
+      const isInstalledApp = window.matchMedia('(display-mode: standalone)').matches;
+
+      if (Notification.permission === 'granted' && linkedUser) {
+        // Already set up: keep prompt hidden and silently refresh FCM token
+        promptEl.classList.add('hidden');
+        try {
+          const token = await messaging.getToken({
+            vapidKey: VAPID_KEY,
+            serviceWorkerRegistration: swRegistration
+          });
+          if (token) await db.ref(`tokens/${linkedUser}/${token}`).set(true);
+        } catch (e) {
+          console.error('Silent token refresh failed:', e);
+        }
+      } else if (isInstalledApp && Notification.permission !== 'denied' && !dismissed) {
+        // Only show the setup prompt when running as an installed Home Screen app
+        promptEl.classList.remove('hidden');
+      }
+    }
+    
+    // Triggered when user taps their name in the one-time setup bar
+    async function setupNotifications(user) {
+      try {
+        // Pops up Android's native "Allow notifications?" dialog
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          dismissPrompt();
+          return;
+        }
+
+        if (!swRegistration) {
+          swRegistration = await navigator.serviceWorker.ready;
+        }
+
+        // Generate FCM push token and store it under userA or userB in Firebase
+        const token = await messaging.getToken({
+          vapidKey: VAPID_KEY,
+          serviceWorkerRegistration: swRegistration
+        });
+
+        if (token) {
+              await db.ref(`tokens/${user}/${token}`).set(true);
+              localStorage.setItem('linkedNotifyUser', user);
+              // Permanently hide the prompt bar once linked
+              document.getElementById('notify-prompt').classList.add('hidden');
+        }
+      } catch (err) {
+        console.error('Notification setup error:', err);
+      }
+    }
+
+    function dismissPrompt() {
+      localStorage.setItem('notifyPromptDismissed', 'true');
+      document.getElementById('notify-prompt').classList.add('hidden');
+    }
+
+    // =========================================================================
+    // 4. REALTIME STOPWATCH SYNC & MILLISECOND PHASE ALIGNMENT
+    // =========================================================================
     const timers = {
       userA: { running: false, start: 0, accumulated: 0 },
       userB: { running: false, start: 0, accumulated: 0 }
@@ -391,10 +549,11 @@
       userB: null
     };
 
-    const NOTE_DURATION_MS = 30 * 60 * 1000;
+    const NOTE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
     let serverOffset = 0;
     let rafId = null;
 
+    // Sync local clock with Firebase server time so both timers flip digits together
     db.ref('.info/serverTimeOffset').on('value', snap => {
       serverOffset = snap.val() || 0;
       updateNotesUI();
@@ -412,6 +571,7 @@
       return `${h}:${m}:${s}`;
     }
 
+    // Unified animation loop updates both stopwatches in the exact same screen refresh
     function renderLoop() {
       const now = getServerNow();
       let anyRunning = false;
@@ -436,6 +596,7 @@
       }
     }
 
+    // Subscribe to realtime timer and note changes for both users
     ['userA', 'userB'].forEach(user => {
       db.ref(`timers/${user}`).on('value', snap => {
         const val = snap.val() || { running: false, start: 0, accumulated: 0 };
@@ -448,9 +609,7 @@
         if (val.running) {
           dot.classList.add('active');
           dot.setAttribute('title', 'Status: Running');
-          if (!rafId) {
-            rafId = requestAnimationFrame(renderLoop);
-          }
+          if (!rafId) rafId = requestAnimationFrame(renderLoop);
         } else {
           dot.classList.remove('active');
           dot.setAttribute('title', 'Status: Off');
@@ -464,6 +623,9 @@
       });
     });
 
+    // =========================================================================
+    // 5. 30-MINUTE ILLUMINATED NOTES & PUSH NOTIFICATION DISPATCH
+    // =========================================================================
     function updateNotesUI() {
       const now = getServerNow();
       const stage = document.getElementById('notes-stage');
@@ -478,10 +640,12 @@
           const remainingMs = note.expiresAt - now;
           const minsLeft = Math.ceil(remainingMs / 60000);
 
+          // Lock this user's note input until their active 30m note expires
           input.disabled = true;
           btn.disabled = true;
           input.placeholder = `Locked (${minsLeft}m left)`;
 
+          // Build glowing note banner at top
           const card = document.createElement('div');
           card.className = 'illuminated-note';
 
@@ -506,10 +670,12 @@
           card.appendChild(timer);
           stage.appendChild(card);
         } else {
+          // Unlock input when expired or empty
           input.disabled = false;
           btn.disabled = false;
           input.placeholder = 'Drop a 30m note (25 max)...';
 
+          // Clean up expired note from Firebase
           if (note && note.expiresAt <= now) {
             db.ref(`notes/${user}`).remove();
           }
@@ -517,12 +683,14 @@
       });
     }
 
+    // Refresh remaining minute counters every 5 seconds
     setInterval(updateNotesUI, 5000);
 
     function sendNote(event, user, name) {
       event.preventDefault();
       const now = getServerNow();
 
+      // Prevent sending if user already has an active note
       if (activeNotes[user] && activeNotes[user].expiresAt > now) return;
 
       const input = document.getElementById(`input-${user}`);
@@ -531,13 +699,32 @@
       if (!text) return;
 
       input.value = '';
+
+      // 1. Write note to Firebase Realtime Database
       db.ref(`notes/${user}`).set({
         name: name,
         text: text,
         expiresAt: now + NOTE_DURATION_MS
       });
+
+      // 2. Trigger Cloudflare Worker to send push notification to the other person's Android
+      const recipientUser = user === 'userA' ? 'userB' : 'userA';
+      if (WORKER_URL && !WORKER_URL.includes('YOUR_SUBDOMAIN')) {
+        fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            senderName: name,
+            recipientUser: recipientUser,
+            noteText: text
+          })
+        }).catch(err => console.error('Push trigger failed:', err));
+      }
     }
 
+    // =========================================================================
+    // 6. SAVED LOGS & STOPWATCH CONTROLS
+    // =========================================================================
     db.ref('history').limitToLast(20).on('value', snap => {
       const container = document.getElementById('history-container');
       const data = snap.val();
@@ -562,6 +749,7 @@
       if (timers[user].running) return;
       const now = getServerNow();
       const acc = timers[user].accumulated;
+      // Snap start timestamp downward to a whole-second boundary for synchronized digit flips
       const alignedStart = Math.floor((now - acc) / 1000) * 1000 + acc;
 
       db.ref(`timers/${user}`).set({
@@ -596,6 +784,7 @@
         date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
 
+      // Automatically reset stopwatch to 00:00:00 after logging
       db.ref(`timers/${user}`).set({
         running: false,
         start: 0,
