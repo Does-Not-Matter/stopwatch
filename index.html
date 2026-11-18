@@ -462,14 +462,15 @@
         })
         .catch((err) => console.error('Service Worker error:', err));
     }
-    //again
+    
     // Show native system notification when the app is open in the foreground
     messaging.onMessage((payload) => {
       if (Notification.permission === 'granted' && payload.notification) {
         new Notification(payload.notification.title, {
           body: payload.notification.body,
-          // Use monochrome transparent badge only (no right-side thumbnail icon)
-          badge: 'badge.png'
+          // Monochrome silhouette on the left, invisible transparent PNG on the right
+          badge: 'badge.png',
+          icon: 'transparent.png'
         });
       }
     });
