@@ -462,7 +462,7 @@
         })
         .catch((err) => console.error('Service Worker error:', err));
     }
-
+    //again
     // Show native system notification when the app is open in the foreground
     messaging.onMessage((payload) => {
       if (Notification.permission === 'granted' && payload.notification) {
