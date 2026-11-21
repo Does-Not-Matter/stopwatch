@@ -61,7 +61,7 @@
       margin-bottom: -6px;
     }
 
-    /* One-Time Notification Permission Prompt (Auto-hides forever once linked) */
+    /* One-Time Notification Permission Prompt (Only shown in standalone PWA mode) */
     .notify-prompt {
       background: #18181b;
       border: 1px solid #3f3f46;
@@ -166,7 +166,7 @@
       flex-shrink: 0;
     }
 
-    /* Clean Stopwatch Cards (No extra icons) */
+    /* Clean Stopwatch Cards */
     .card {
       background: var(--card-bg);
       border: 1px solid var(--border);
@@ -329,9 +329,9 @@
   <div class="container">
     <h1 class="app-title">stopwatch4two</h1>
 
-    <!-- One-time setup prompt: disappears permanently once this phone grants notification permission -->
+    <!-- One-time setup prompt: appears only inside installed PWA until linked -->
     <div class="notify-prompt hidden" id="notify-prompt">
-      <span>Enable note alerts for:</span>
+      <span>Enable alerts for:</span>
       <div class="notify-actions">
         <button class="btn-link-user" onclick="setupNotifications('userA')">Pratishtha</button>
         <button class="btn-link-user" onclick="setupNotifications('userB')">Abhi</button>
@@ -350,7 +350,7 @@
         <div class="status-dot" id="dot-userA" title="Status: Off"></div>
       </div>
       <div class="controls">
-        <button class="btn-start" onclick="start('userA')">Start</button>
+        <button class="btn-start" onclick="start('userA', 'Pratishtha')">Start</button>
         <button class="btn-stop" onclick="stop('userA')">Stop</button>
         <button onclick="reset('userA')">Reset</button>
         <button class="btn-save" onclick="save('userA', 'Pratishtha')">Log</button>
@@ -369,7 +369,7 @@
         <div class="status-dot" id="dot-userB" title="Status: Off"></div>
       </div>
       <div class="controls">
-        <button class="btn-start" onclick="start('userB')">Start</button>
+        <button class="btn-start" onclick="start('userB', 'Abhi')">Start</button>
         <button class="btn-stop" onclick="stop('userB')">Stop</button>
         <button onclick="reset('userB')">Reset</button>
         <button class="btn-save" onclick="save('userB', 'Abhi')">Log</button>
@@ -425,7 +425,6 @@
         canvas.height = size;
         const ctx = canvas.getContext('2d');
 
-        // Clip canvas into a rounded square
         ctx.beginPath();
         ctx.moveTo(radius, 0);
         ctx.lineTo(size - radius, 0);
@@ -445,7 +444,7 @@
     })();
 
     // =========================================================================
-    // 3. FIREBASE & ANDROID PUSH NOTIFICATION SETUP (No permanent UI clutter)
+    // 3. FIREBASE & ANDROID PUSH NOTIFICATION SETUP (Multi-device supported)
     // =========================================================================
     if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
@@ -453,7 +452,6 @@
 
     let swRegistration = null;
 
-    // Register background service worker on GitHub Pages relative path
     if ('serviceWorker' in navigator && 'Notification' in window) {
       navigator.serviceWorker.register('./firebase-messaging-sw.js')
         .then(async (reg) => {
@@ -462,30 +460,26 @@
         })
         .catch((err) => console.error('Service Worker error:', err));
     }
-    
-    // Show native system notification when the app is open in the foreground
+
+    // Show native system notification when app is open in foreground
     messaging.onMessage((payload) => {
       if (Notification.permission === 'granted' && payload.notification) {
         new Notification(payload.notification.title, {
-          body: payload.notification.body,
-          // Monochrome silhouette on the left, invisible transparent PNG on the right
+          body: payload.notification.body || '',
           badge: 'badge.png',
           icon: 'transparent.png'
         });
       }
     });
 
-    // Check if this Android device is already linked; only prompt inside the installed PWA app
+    // Only prompt inside the installed standalone PWA; silently keep token synced afterward
     async function checkNotificationState() {
       const linkedUser = localStorage.getItem('linkedNotifyUser');
       const dismissed = localStorage.getItem('notifyPromptDismissed');
       const promptEl = document.getElementById('notify-prompt');
-
-      // Detect if opened fullscreen from the Android Home Screen icon (PWA standalone mode)
       const isInstalledApp = window.matchMedia('(display-mode: standalone)').matches;
 
       if (Notification.permission === 'granted' && linkedUser) {
-        // Already set up: keep prompt hidden and silently refresh FCM token
         promptEl.classList.add('hidden');
         try {
           const token = await messaging.getToken({
@@ -497,15 +491,12 @@
           console.error('Silent token refresh failed:', e);
         }
       } else if (isInstalledApp && Notification.permission !== 'denied' && !dismissed) {
-        // Only show the setup prompt when running as an installed Home Screen app
         promptEl.classList.remove('hidden');
       }
     }
-    
-    // Triggered when user taps their name in the one-time setup bar
+
     async function setupNotifications(user) {
       try {
-        // Pops up Android's native "Allow notifications?" dialog
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
           dismissPrompt();
@@ -516,17 +507,16 @@
           swRegistration = await navigator.serviceWorker.ready;
         }
 
-        // Generate FCM push token and store it under userA or userB in Firebase
         const token = await messaging.getToken({
           vapidKey: VAPID_KEY,
           serviceWorkerRegistration: swRegistration
         });
 
         if (token) {
-              await db.ref(`tokens/${user}/${token}`).set(true);
-              localStorage.setItem('linkedNotifyUser', user);
-              // Permanently hide the prompt bar once linked
-              document.getElementById('notify-prompt').classList.add('hidden');
+          // Store token as a key so multiple devices can receive notifications simultaneously
+          await db.ref(`tokens/${user}/${token}`).set(true);
+          localStorage.setItem('linkedNotifyUser', user);
+          document.getElementById('notify-prompt').classList.add('hidden');
         }
       } catch (err) {
         console.error('Notification setup error:', err);
@@ -539,7 +529,7 @@
     }
 
     // =========================================================================
-    // 4. REALTIME STOPWATCH SYNC & MILLISECOND PHASE ALIGNMENT
+    // 4. REALTIME STOPWATCH SYNC, MILLISECOND PHASE ALIGNMENT & START COOLDOWNS
     // =========================================================================
     const timers = {
       userA: { running: false, start: 0, accumulated: 0 },
@@ -551,11 +541,16 @@
       userB: null
     };
 
-    const NOTE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+    // Tracks the last timestamp a start notification was sent for each user
+    const startCooldowns = {
+      userA: 0,
+      userB: 0
+    };
+
+    const THIRTY_MINS_MS = 30 * 60 * 1000;
     let serverOffset = 0;
     let rafId = null;
 
-    // Sync local clock with Firebase server time so both timers flip digits together
     db.ref('.info/serverTimeOffset').on('value', snap => {
       serverOffset = snap.val() || 0;
       updateNotesUI();
@@ -573,7 +568,6 @@
       return `${h}:${m}:${s}`;
     }
 
-    // Unified animation loop updates both stopwatches in the exact same screen refresh
     function renderLoop() {
       const now = getServerNow();
       let anyRunning = false;
@@ -598,7 +592,6 @@
       }
     }
 
-    // Subscribe to realtime timer and note changes for both users
     ['userA', 'userB'].forEach(user => {
       db.ref(`timers/${user}`).on('value', snap => {
         const val = snap.val() || { running: false, start: 0, accumulated: 0 };
@@ -623,6 +616,11 @@
         activeNotes[user] = snap.val();
         updateNotesUI();
       });
+
+      // Keep local copy of 30-minute start-notification cooldown in sync
+      db.ref(`startCooldowns/${user}`).on('value', snap => {
+        startCooldowns[user] = snap.val() || 0;
+      });
     });
 
     // =========================================================================
@@ -642,12 +640,10 @@
           const remainingMs = note.expiresAt - now;
           const minsLeft = Math.ceil(remainingMs / 60000);
 
-          // Lock this user's note input until their active 30m note expires
           input.disabled = true;
           btn.disabled = true;
           input.placeholder = `Locked (${minsLeft}m left)`;
 
-          // Build glowing note banner at top
           const card = document.createElement('div');
           card.className = 'illuminated-note';
 
@@ -672,12 +668,10 @@
           card.appendChild(timer);
           stage.appendChild(card);
         } else {
-          // Unlock input when expired or empty
           input.disabled = false;
           btn.disabled = false;
           input.placeholder = 'Drop a 30m note (25 max)...';
 
-          // Clean up expired note from Firebase
           if (note && note.expiresAt <= now) {
             db.ref(`notes/${user}`).remove();
           }
@@ -685,14 +679,12 @@
       });
     }
 
-    // Refresh remaining minute counters every 5 seconds
     setInterval(updateNotesUI, 5000);
 
     function sendNote(event, user, name) {
       event.preventDefault();
       const now = getServerNow();
 
-      // Prevent sending if user already has an active note
       if (activeNotes[user] && activeNotes[user].expiresAt > now) return;
 
       const input = document.getElementById(`input-${user}`);
@@ -702,25 +694,25 @@
 
       input.value = '';
 
-      // 1. Write note to Firebase Realtime Database
       db.ref(`notes/${user}`).set({
         name: name,
         text: text,
-        expiresAt: now + NOTE_DURATION_MS
+        expiresAt: now + THIRTY_MINS_MS
       });
 
-      // 2. Trigger Cloudflare Worker to send push notification to the other person's Android
       const recipientUser = user === 'userA' ? 'userB' : 'userA';
       if (WORKER_URL && !WORKER_URL.includes('YOUR_SUBDOMAIN')) {
         fetch(WORKER_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+            type: 'note',
+            senderUser: user,
             senderName: name,
             recipientUser: recipientUser,
             noteText: text
           })
-        }).catch(err => console.error('Push trigger failed:', err));
+        }).catch(err => console.error('Note push trigger failed:', err));
       }
     }
 
@@ -747,11 +739,10 @@
       });
     });
 
-    function start(user) {
+    function start(user, name) {
       if (timers[user].running) return;
       const now = getServerNow();
       const acc = timers[user].accumulated;
-      // Snap start timestamp downward to a whole-second boundary for synchronized digit flips
       const alignedStart = Math.floor((now - acc) / 1000) * 1000 + acc;
 
       db.ref(`timers/${user}`).set({
@@ -759,6 +750,25 @@
         start: alignedStart,
         accumulated: acc
       });
+
+      // Trigger "CANT LET 'USER' WIN!!" push alert if 30 minutes have passed since last alert
+      const recipientUser = user === 'userA' ? 'userB' : 'userA';
+      const isCoolingDown = now - startCooldowns[user] < THIRTY_MINS_MS;
+
+      if (!isCoolingDown && WORKER_URL && !WORKER_URL.includes('YOUR_SUBDOMAIN')) {
+        // Optimistically update local timestamp to prevent double-clicks
+        startCooldowns[user] = now;
+        fetch(WORKER_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            type: 'start',
+            senderUser: user,
+            senderName: name,
+            recipientUser: recipientUser
+          })
+        }).catch(err => console.error('Start push trigger failed:', err));
+      }
     }
 
     function stop(user) {
@@ -786,7 +796,6 @@
         date: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       });
 
-      // Automatically reset stopwatch to 00:00:00 after logging
       db.ref(`timers/${user}`).set({
         running: false,
         start: 0,
