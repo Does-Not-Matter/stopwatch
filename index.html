@@ -743,6 +743,7 @@
       if (timers[user].running) return;
       const now = getServerNow();
       const acc = timers[user].accumulated;
+      // Align start timestamp downward to whole-second boundary for synchronized digit flips
       const alignedStart = Math.floor((now - acc) / 1000) * 1000 + acc;
 
       db.ref(`timers/${user}`).set({
@@ -751,12 +752,15 @@
         accumulated: acc
       });
 
-      // Trigger "CANT LET 'USER' WIN!!" push alert if 30 minutes have passed since last alert
+      // Trigger "CANT LET 'USER' WIN!!" push alert only if:
+      // 1. 30 minutes have passed since the last start alert
+      // 2. The recipient's stopwatch is NOT already running
       const recipientUser = user === 'userA' ? 'userB' : 'userA';
       const isCoolingDown = now - startCooldowns[user] < THIRTY_MINS_MS;
+      const isRecipientAlreadyRunning = timers[recipientUser].running;
 
-      if (!isCoolingDown && WORKER_URL && !WORKER_URL.includes('YOUR_SUBDOMAIN')) {
-        // Optimistically update local timestamp to prevent double-clicks
+      if (!isCoolingDown && !isRecipientAlreadyRunning && WORKER_URL && !WORKER_URL.includes('YOUR_SUBDOMAIN')) {
+        // Optimistically update local cooldown timestamp to prevent rapid double-taps
         startCooldowns[user] = now;
         fetch(WORKER_URL, {
           method: 'POST',
