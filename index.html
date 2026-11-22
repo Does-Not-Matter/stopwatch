@@ -513,7 +513,6 @@
         });
 
         if (token) {
-          // Store token as a key so multiple devices can receive notifications simultaneously
           await db.ref(`tokens/${user}/${token}`).set(true);
           localStorage.setItem('linkedNotifyUser', user);
           document.getElementById('notify-prompt').classList.add('hidden');
@@ -529,7 +528,7 @@
     }
 
     // =========================================================================
-    // 4. REALTIME STOPWATCH SYNC, MILLISECOND PHASE ALIGNMENT & START COOLDOWNS
+    // 4. REALTIME STOPWATCH SYNC, OVERTAKE DETECTION & START COOLDOWNS
     // =========================================================================
     const timers = {
       userA: { running: false, start: 0, accumulated: 0 },
@@ -541,11 +540,13 @@
       userB: null
     };
 
-    // Tracks the last timestamp a start notification was sent for each user
     const startCooldowns = {
       userA: 0,
       userB: 0
     };
+
+    // Tracks who is currently in the lead ('userA', 'userB', 'none', or null before initial sync)
+    let currentLeader = null;
 
     const THIRTY_MINS_MS = 30 * 60 * 1000;
     let serverOffset = 0;
@@ -560,6 +561,14 @@
       return Date.now() + serverOffset;
     }
 
+    function getCurrentTotal(user, now = getServerNow()) {
+      let total = timers[user].accumulated;
+      if (timers[user].running) {
+        total += Math.max(0, now - timers[user].start);
+      }
+      return total;
+    }
+
     function formatTime(ms) {
       const totalSec = Math.floor(Math.max(0, ms) / 1000);
       const h = String(Math.floor(totalSec / 3600)).padStart(2, '0');
@@ -568,22 +577,80 @@
       return `${h}:${m}:${s}`;
     }
 
+    // Sync leader state from Firebase so both devices share the exact same overtake baseline
+    db.ref('leader').on('value', snap => {
+      currentLeader = snap.exists() ? snap.val() : 'none';
+      checkOvertake(getServerNow());
+    });
+
+    // Evaluates whether a trailing watch has genuinely overtaken the leading watch
+    function checkOvertake(now) {
+      if (currentLeader === null) return;
+
+      const totalA = getCurrentTotal('userA', now);
+      const totalB = getCurrentTotal('userB', now);
+
+      // Compare displayed whole seconds so overtakes align cleanly with visible digits
+      const secA = Math.floor(totalA / 1000);
+      const secB = Math.floor(totalB / 1000);
+
+      if (secA === secB) return; // Tied — neither has surpassed the other yet
+
+      const aheadUser = secA > secB ? 'userA' : 'userB';
+      const behindUser = secA > secB ? 'userB' : 'userA';
+
+      // Case 1: Nobody was leading before (e.g., starting from 00:00:00).
+      // Record the initial leader silently without sending an overtake notification.
+      if (currentLeader === 'none') {
+        db.ref('leader').transaction(val => {
+          if (val === null || val === 'none') return aheadUser;
+          return;
+        });
+        return;
+      }
+
+      // Case 2: The person now ahead was previously behind (currentLeader === behindUser).
+      // Use an atomic transaction so only ONE device sends the push notification.
+      if (currentLeader === behindUser) {
+        db.ref('leader').transaction(val => {
+          if (val === behindUser) return aheadUser;
+          return; // Abort if another device already processed this overtake
+        }, (error, committed) => {
+          if (committed && WORKER_URL && !WORKER_URL.includes('YOUR_SUBDOMAIN')) {
+            fetch(WORKER_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                type: 'overtake',
+                senderUser: aheadUser,
+                recipientUser: behindUser // Notify the user who now has less time
+              })
+            }).catch(err => console.error('Overtake push trigger failed:', err));
+          }
+        });
+      }
+    }
+
     function renderLoop() {
       const now = getServerNow();
       let anyRunning = false;
+      let digitChanged = false;
 
       ['userA', 'userB'].forEach(user => {
-        let total = timers[user].accumulated;
-        if (timers[user].running) {
-          anyRunning = true;
-          total += Math.max(0, now - timers[user].start);
-        }
+        if (timers[user].running) anyRunning = true;
+        const total = getCurrentTotal(user, now);
         const el = document.getElementById(`time-${user}`);
         const formatted = formatTime(total);
         if (el.innerText !== formatted) {
           el.innerText = formatted;
+          digitChanged = true;
         }
       });
+
+      // Check for an overtake whenever a second ticks over
+      if (digitChanged) {
+        checkOvertake(now);
+      }
 
       if (anyRunning) {
         rafId = requestAnimationFrame(renderLoop);
@@ -610,6 +677,8 @@
           dot.setAttribute('title', 'Status: Off');
           document.getElementById(`time-${user}`).innerText = formatTime(val.accumulated);
         }
+
+        checkOvertake(getServerNow());
       });
 
       db.ref(`notes/${user}`).on('value', snap => {
@@ -617,7 +686,6 @@
         updateNotesUI();
       });
 
-      // Keep local copy of 30-minute start-notification cooldown in sync
       db.ref(`startCooldowns/${user}`).on('value', snap => {
         startCooldowns[user] = snap.val() || 0;
       });
@@ -743,7 +811,6 @@
       if (timers[user].running) return;
       const now = getServerNow();
       const acc = timers[user].accumulated;
-      // Align start timestamp downward to whole-second boundary for synchronized digit flips
       const alignedStart = Math.floor((now - acc) / 1000) * 1000 + acc;
 
       db.ref(`timers/${user}`).set({
@@ -752,7 +819,7 @@
         accumulated: acc
       });
 
-      // Trigger "CANT LET 'USER' WIN!!" push alert only if:
+      // Trigger "CAN'T LET 'USER' WIN!!" push alert only if:
       // 1. 30 minutes have passed since the last start alert
       // 2. The recipient's stopwatch is NOT already running
       const recipientUser = user === 'userA' ? 'userB' : 'userA';
@@ -760,7 +827,6 @@
       const isRecipientAlreadyRunning = timers[recipientUser].running;
 
       if (!isCoolingDown && !isRecipientAlreadyRunning && WORKER_URL && !WORKER_URL.includes('YOUR_SUBDOMAIN')) {
-        // Optimistically update local cooldown timestamp to prevent rapid double-taps
         startCooldowns[user] = now;
         fetch(WORKER_URL, {
           method: 'POST',
@@ -785,8 +851,18 @@
       });
     }
 
+    // Silently updates the leader baseline when a user resets or logs their timer to 0,
+    // preventing a false overtake notification while allowing future overtakes to work.
+    function syncLeaderAfterZeroing(resetUser) {
+      const otherUser = resetUser === 'userA' ? 'userB' : 'userA';
+      const otherSec = Math.floor(getCurrentTotal(otherUser) / 1000);
+      const nextLeader = otherSec > 0 ? otherUser : 'none';
+      db.ref('leader').set(nextLeader);
+    }
+
     function reset(user) {
       db.ref(`timers/${user}`).set({ running: false, start: 0, accumulated: 0 });
+      syncLeaderAfterZeroing(user);
     }
 
     function save(user, name) {
@@ -805,6 +881,7 @@
         start: 0,
         accumulated: 0
       });
+      syncLeaderAfterZeroing(user);
     }
   </script>
 </body>
