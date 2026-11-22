@@ -535,6 +535,14 @@
       userB: { running: false, start: 0, accumulated: 0 }
     };
 
+    // Track whether initial snapshots have loaded so startup never triggers false overtakes
+    const initialSync = {
+      userA: false,
+      userB: false,
+      leader: false
+    };
+    let baselineEstablished = false;
+
     const activeNotes = {
       userA: null,
       userB: null
@@ -545,7 +553,6 @@
       userB: 0
     };
 
-    // Tracks who is currently in the lead ('userA', 'userB', 'none', or null before initial sync)
     let currentLeader = null;
 
     const THIRTY_MINS_MS = 30 * 60 * 1000;
@@ -577,22 +584,31 @@
       return `${h}:${m}:${s}`;
     }
 
-    // Sync leader state from Firebase so both devices share the exact same overtake baseline
+    // Sync leader state from Firebase
     db.ref('leader').on('value', snap => {
       currentLeader = snap.exists() ? snap.val() : 'none';
+      initialSync.leader = true;
       checkOvertake(getServerNow());
     });
 
-    // Evaluates whether a trailing watch has genuinely overtaken the leading watch
+    // Evaluates whether a trailing watch has genuinely overtaken a stopped leading watch
     function checkOvertake(now) {
-      if (currentLeader === null) return;
+      // Do not evaluate until BOTH timers and the leader node have completed their initial load
+      if (!initialSync.userA || !initialSync.userB || !initialSync.leader) return;
 
-      const totalA = getCurrentTotal('userA', now);
-      const totalB = getCurrentTotal('userB', now);
+      const secA = Math.floor(getCurrentTotal('userA', now) / 1000);
+      const secB = Math.floor(getCurrentTotal('userB', now) / 1000);
 
-      // Compare displayed whole seconds so overtakes align cleanly with visible digits
-      const secA = Math.floor(totalA / 1000);
-      const secB = Math.floor(totalB / 1000);
+      // On first load after all three snapshots arrive, silently align the leader baseline
+      // without ever sending a notification
+      if (!baselineEstablished) {
+        baselineEstablished = true;
+        const trueInitialLeader = secA === secB ? 'none' : (secA > secB ? 'userA' : 'userB');
+        if (currentLeader !== trueInitialLeader) {
+          db.ref('leader').set(trueInitialLeader);
+        }
+        return;
+      }
 
       if (secA === secB) return; // Tied — neither has surpassed the other yet
 
@@ -609,12 +625,14 @@
         return;
       }
 
-      // Case 2: The person now ahead was previously behind (currentLeader === behindUser).
-      // Use an atomic transaction so only ONE device sends the push notification.
-      if (currentLeader === behindUser) {
+      // Case 2: Genuine overtake — only triggers when:
+      // 1. The user now ahead was previously behind (currentLeader === behindUser)
+      // 2. The overtaker's watch is actively running (timers[aheadUser].running)
+      // 3. The previous leader's watch is currently turned OFF (!timers[behindUser].running)
+      if (currentLeader === behindUser && timers[aheadUser].running && !timers[behindUser].running) {
         db.ref('leader').transaction(val => {
           if (val === behindUser) return aheadUser;
-          return; // Abort if another device already processed this overtake
+          return; // Abort if another device already claimed this overtake
         }, (error, committed) => {
           if (committed && WORKER_URL && !WORKER_URL.includes('YOUR_SUBDOMAIN')) {
             fetch(WORKER_URL, {
@@ -623,7 +641,7 @@
               body: JSON.stringify({
                 type: 'overtake',
                 senderUser: aheadUser,
-                recipientUser: behindUser // Notify the user who now has less time
+                recipientUser: behindUser // Notify the previous leader who now has less time
               })
             }).catch(err => console.error('Overtake push trigger failed:', err));
           }
@@ -647,7 +665,7 @@
         }
       });
 
-      // Check for an overtake whenever a second ticks over
+      // Check for an overtake whenever a displayed second ticks over
       if (digitChanged) {
         checkOvertake(now);
       }
@@ -665,6 +683,7 @@
         timers[user].running = val.running;
         timers[user].start = val.start;
         timers[user].accumulated = val.accumulated;
+        initialSync[user] = true;
 
         const dot = document.getElementById(`dot-${user}`);
 
