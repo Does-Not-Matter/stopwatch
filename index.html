@@ -535,13 +535,13 @@
       userB: { running: false, start: 0, accumulated: 0 }
     };
 
-    // Track whether initial snapshots have loaded so startup never triggers false overtakes
+    // Wait for timers, leader, AND serverTimeOffset before checking overtakes
     const initialSync = {
       userA: false,
       userB: false,
-      leader: false
+      leader: false,
+      offset: false
     };
-    let baselineEstablished = false;
 
     const activeNotes = {
       userA: null,
@@ -561,6 +561,7 @@
 
     db.ref('.info/serverTimeOffset').on('value', snap => {
       serverOffset = snap.val() || 0;
+      initialSync.offset = true;
       updateNotesUI();
     });
 
@@ -584,7 +585,7 @@
       return `${h}:${m}:${s}`;
     }
 
-    // Sync leader state from Firebase
+    // Sync leader state from Firebase (never overwrite it backwards on page load)
     db.ref('leader').on('value', snap => {
       currentLeader = snap.exists() ? snap.val() : 'none';
       initialSync.leader = true;
@@ -593,27 +594,16 @@
 
     // Evaluates whether a trailing watch has genuinely overtaken a stopped leading watch
     function checkOvertake(now) {
-      // Do not evaluate until BOTH timers and the leader node have completed their initial load
-      if (!initialSync.userA || !initialSync.userB || !initialSync.leader) return;
+      if (!initialSync.userA || !initialSync.userB || !initialSync.leader || !initialSync.offset) return;
 
       const secA = Math.floor(getCurrentTotal('userA', now) / 1000);
       const secB = Math.floor(getCurrentTotal('userB', now) / 1000);
-
-      // On first load after all three snapshots arrive, silently align the leader baseline
-      // without ever sending a notification
-      if (!baselineEstablished) {
-        baselineEstablished = true;
-        const trueInitialLeader = secA === secB ? 'none' : (secA > secB ? 'userA' : 'userB');
-        if (currentLeader !== trueInitialLeader) {
-          db.ref('leader').set(trueInitialLeader);
-        }
-        return;
-      }
 
       if (secA === secB) return; // Tied — neither has surpassed the other yet
 
       const aheadUser = secA > secB ? 'userA' : 'userB';
       const behindUser = secA > secB ? 'userB' : 'userA';
+      const secBehind = Math.min(secA, secB);
 
       // Case 1: Nobody was leading before (e.g., starting from 00:00:00).
       // Record the initial leader silently without sending an overtake notification.
@@ -629,7 +619,13 @@
       // 1. The user now ahead was previously behind (currentLeader === behindUser)
       // 2. The overtaker's watch is actively running (timers[aheadUser].running)
       // 3. The previous leader's watch is currently turned OFF (!timers[behindUser].running)
-      if (currentLeader === behindUser && timers[aheadUser].running && !timers[behindUser].running) {
+      // 4. The previous leader actually had > 0 seconds on their watch (secBehind > 0)
+      if (
+        currentLeader === behindUser &&
+        timers[aheadUser].running &&
+        !timers[behindUser].running &&
+        secBehind > 0
+      ) {
         db.ref('leader').transaction(val => {
           if (val === behindUser) return aheadUser;
           return; // Abort if another device already claimed this overtake
