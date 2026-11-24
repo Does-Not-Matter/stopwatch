@@ -125,7 +125,7 @@
       justify-content: space-between;
       align-items: center;
       gap: 12px;
-      animation: pulseGlow 4s ease-in-out infinite;
+      animation: pulseGlow 6s ease-in-out infinite;
     }
 
     @keyframes pulseGlow {
@@ -767,12 +767,12 @@
     function updateNotesUI() {
       const now = getServerNow();
       const stage = document.getElementById('notes-stage');
-      stage.innerHTML = '';
 
       ['userA', 'userB'].forEach(user => {
         const note = activeNotes[user];
         const input = document.getElementById(`input-${user}`);
         const btn = document.getElementById(`btn-note-${user}`);
+        const existingCard = document.getElementById(`note-card-${user}`);
 
         if (note && note.expiresAt > now) {
           const remainingMs = note.expiresAt - now;
@@ -782,8 +782,21 @@
           btn.disabled = true;
           input.placeholder = `Locked (${minsLeft}m left)`;
 
+          // Reuse the existing DOM card so the CSS glow animation never resets
+          if (existingCard && existingCard.dataset.expiresAt === String(note.expiresAt)) {
+            existingCard.querySelector('.note-timer').textContent = `${minsLeft}m`;
+            const tickBtn = existingCard.querySelector('.note-tick');
+            tickBtn.className = note.seen ? 'note-tick seen' : 'note-tick';
+            tickBtn.title = note.seen ? 'Liked' : 'Like note';
+            return;
+          }
+
+          if (existingCard) existingCard.remove();
+
           const card = document.createElement('div');
+          card.id = `note-card-${user}`;
           card.className = 'illuminated-note';
+          card.dataset.expiresAt = String(note.expiresAt);
 
           const content = document.createElement('div');
           content.className = 'note-content';
@@ -799,7 +812,6 @@
           content.appendChild(author);
           content.appendChild(text);
 
-          // Right-side wrapper: circle-tick button before the remaining time
           const meta = document.createElement('div');
           meta.className = 'note-meta';
 
@@ -819,8 +831,15 @@
 
           card.appendChild(content);
           card.appendChild(meta);
-          stage.appendChild(card);
+
+          // Keep Pratishtha's note above Abhi's if both are active simultaneously
+          if (user === 'userA' && stage.firstChild) {
+            stage.insertBefore(card, stage.firstChild);
+          } else {
+            stage.appendChild(card);
+          }
         } else {
+          if (existingCard) existingCard.remove();
           input.disabled = false;
           btn.disabled = false;
           input.placeholder = 'Drop a 30m note (25 max)...';
