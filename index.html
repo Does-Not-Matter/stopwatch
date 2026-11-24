@@ -764,6 +764,16 @@
 
     setInterval(updateNotesUI, 5000);
 
+    // Enforce 25-character limit live on every keystroke (overrides Android IME/Gboard composition buffering)
+    document.querySelectorAll('.note-input').forEach((input) => {
+      input.addEventListener('input', () => {
+        const chars = Array.from(input.value);
+        if (chars.length > 25) {
+          input.value = chars.slice(0, 25).join('');
+        }
+      });
+    });
+
     function sendNote(event, user, name) {
       event.preventDefault();
       const now = getServerNow();
