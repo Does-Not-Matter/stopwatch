@@ -179,34 +179,39 @@
       flex-shrink: 0;
     }
 
-    /* Subtle violet circle-tick button (~20% smaller) matching the illuminated note card */
+    /* Borderless heart button matching the ambient note card */
     .note-tick {
       width: 18px;
       height: 18px;
       padding: 0;
-      border-radius: 50%;
+      border: none;
+      background: transparent;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      background: rgba(139, 92, 246, 0.1);
-      border: 1.5px solid rgba(167, 139, 250, 0.4);
       color: rgba(216, 180, 254, 0.55);
       cursor: pointer;
-      transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+      transition: color 0.25s ease, transform 0.2s ease, filter 0.25s ease;
     }
 
     .note-tick svg {
-      width: 10px;
-      height: 10px;
-      stroke-width: 2.6;
+      width: 15px;
+      height: 15px;
+      fill: transparent;
+      stroke: currentColor;
+      stroke-width: 2.1;
+      transition: fill 0.25s ease, stroke 0.25s ease;
     }
 
-    /* Glowing green state when acknowledged */
+    /* Solid glowing red heart when tapped */
     .note-tick.seen {
-      background: rgba(34, 197, 94, 0.18);
-      border-color: var(--accent-green);
-      color: var(--accent-green);
-      box-shadow: 0 0 12px rgba(34, 197, 94, 0.45), inset 0 0 6px rgba(34, 197, 94, 0.2);
+      color: var(--accent-red);
+      filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.55));
+    }
+
+    .note-tick.seen svg {
+      fill: var(--accent-red);
+      stroke: var(--accent-red);
     }
 
     /* Clean Stopwatch Cards */
@@ -801,8 +806,8 @@
           const tickBtn = document.createElement('button');
           tickBtn.type = 'button';
           tickBtn.className = note.seen ? 'note-tick seen' : 'note-tick';
-          tickBtn.title = note.seen ? 'Acknowledged' : 'Mark as seen';
-          tickBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+          tickBtn.title = note.seen ? 'Liked' : 'Like note';
+          tickBtn.innerHTML = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
           tickBtn.onclick = () => toggleNoteSeen(user);
 
           const timer = document.createElement('span');
