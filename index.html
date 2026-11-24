@@ -166,6 +166,44 @@
       flex-shrink: 0;
     }
 
+    /* Right-side container holding the circle-tick button and remaining minutes */
+    .note-meta {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    /* Subtle violet circle-tick button matching the illuminated note card */
+    .note-tick {
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(139, 92, 246, 0.1);
+      border: 1.5px solid rgba(167, 139, 250, 0.4);
+      color: rgba(216, 180, 254, 0.55);
+      cursor: pointer;
+      transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .note-tick svg {
+      width: 12px;
+      height: 12px;
+      stroke-width: 2.6;
+    }
+
+    /* Glowing green state when acknowledged */
+    .note-tick.seen {
+      background: rgba(34, 197, 94, 0.18);
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+      box-shadow: 0 0 12px rgba(34, 197, 94, 0.45), inset 0 0 6px rgba(34, 197, 94, 0.2);
+    }
+
     /* Clean Stopwatch Cards */
     .card {
       background: var(--card-bg);
@@ -709,6 +747,13 @@
     // =========================================================================
     // 5. 30-MINUTE ILLUMINATED NOTES & PUSH NOTIFICATION DISPATCH
     // =========================================================================
+    // Toggles the green circle-tick state on an active 30-minute note
+    function toggleNoteSeen(user) {
+      const note = activeNotes[user];
+      if (!note) return;
+      db.ref(`notes/${user}/seen`).set(!note.seen);
+    }
+
     function updateNotesUI() {
       const now = getServerNow();
       const stage = document.getElementById('notes-stage');
@@ -741,14 +786,29 @@
           text.className = 'note-text';
           text.textContent = note.text;
 
+          content.appendChild(author);
+          content.appendChild(text);
+
+          // Right-side wrapper: circle-tick button before the remaining time
+          const meta = document.createElement('div');
+          meta.className = 'note-meta';
+
+          const tickBtn = document.createElement('button');
+          tickBtn.type = 'button';
+          tickBtn.className = note.seen ? 'note-tick seen' : 'note-tick';
+          tickBtn.title = note.seen ? 'Acknowledged' : 'Mark as seen';
+          tickBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+          tickBtn.onclick = () => toggleNoteSeen(user);
+
           const timer = document.createElement('span');
           timer.className = 'note-timer';
           timer.textContent = `${minsLeft}m`;
 
-          content.appendChild(author);
-          content.appendChild(text);
+          meta.appendChild(tickBtn);
+          meta.appendChild(timer);
+
           card.appendChild(content);
-          card.appendChild(timer);
+          card.appendChild(meta);
           stage.appendChild(card);
         } else {
           input.disabled = false;
@@ -764,7 +824,7 @@
 
     setInterval(updateNotesUI, 5000);
 
-    // Enforce 25-character limit live on every keystroke (overrides Android IME/Gboard composition buffering)
+    // Enforce 25-character limit live on every keystroke
     document.querySelectorAll('.note-input').forEach((input) => {
       input.addEventListener('input', () => {
         const chars = Array.from(input.value);
@@ -790,7 +850,8 @@
       db.ref(`notes/${user}`).set({
         name: name,
         text: text,
-        expiresAt: now + THIRTY_MINS_MS
+        expiresAt: now + THIRTY_MINS_MS,
+        seen: false
       });
 
       const recipientUser = user === 'userA' ? 'userB' : 'userA';
