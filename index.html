@@ -504,20 +504,30 @@
       navigator.serviceWorker.register('./firebase-messaging-sw.js')
         .then(async (reg) => {
           swRegistration = reg;
+          await reg.update();
           await checkNotificationState();
         })
         .catch((err) => console.error('Service Worker error:', err));
     }
 
-    // Show native system notification when app is open in foreground
-    messaging.onMessage((payload) => {
-      if (Notification.permission === 'granted' && payload.notification) {
-        new Notification(payload.notification.title, {
-          body: payload.notification.body || '',
-          badge: 'badge.png',
-          icon: 'transparent.png'
-        });
-      }
+    // Show native system notification via Service Worker when app is open in foreground
+    // Uses the exact same 'tag' and 'badge.png' so Android never creates a duplicate or square icon
+    messaging.onMessage(async (payload) => {
+      if (Notification.permission !== 'granted') return;
+      const data = payload.data || {};
+      if (!data.title) return;
+
+      const reg = swRegistration || await navigator.serviceWorker.ready;
+      reg.showNotification(data.title, {
+        body: data.body || '',
+        badge: 'badge.png',
+        icon: 'transparent.png',
+        tag: data.eventId || 'stopwatch4two-alert',
+        renotify: true,
+        data: {
+          link: data.link || './'
+        }
+      });
     });
 
     // Only prompt inside the installed standalone PWA; silently keep token synced afterward
