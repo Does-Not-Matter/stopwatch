@@ -511,13 +511,11 @@
 
     // Show native system notification when app is open in foreground
     messaging.onMessage((payload) => {
-      const data = payload.data || payload.notification || {};
-      if (Notification.permission === 'granted' && data.title) {
-        new Notification(data.title, {
-          body: data.body || '',
+      if (Notification.permission === 'granted' && payload.notification) {
+        new Notification(payload.notification.title, {
+          body: payload.notification.body || '',
           badge: 'badge.png',
-          icon: 'transparent.png',
-          tag: data.tag || 'stopwatch4two-alert'
+          icon: 'transparent.png'
         });
       }
     });
