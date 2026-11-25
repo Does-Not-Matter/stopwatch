@@ -1,4 +1,4 @@
-// Service Worker: Displays high-priority background notifications & handles notification taps
+// Service Worker: Lets Firebase/Chrome render native notification visuals & handles taps
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
 
@@ -16,31 +16,12 @@ if (!firebase.apps.length) {
   firebase.initializeApp(firebaseConfig);
 }
 
-const messaging = firebase.messaging();
-
-// Wake immediately on high-priority data-only FCM messages
-messaging.onBackgroundMessage((payload) => {
-  const data = payload.data || payload.notification || {};
-  const title = data.title;
-  if (!title) return;
-
-  const options = {
-    body: data.body || '',
-    badge: 'badge.png',
-    icon: 'transparent.png',
-    tag: data.tag || 'stopwatch4two-alert',
-    renotify: true,
-    vibrate: [120, 60, 120],
-    data: { url: data.link || './' }
-  };
-
-  return self.registration.showNotification(title, options);
-});
+firebase.messaging();
 
 // Open or focus stopwatch4two when the notification is tapped
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || './';
+  const targetUrl = event.notification.data?.FCM_MSG?.fcmOptions?.link || './';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
