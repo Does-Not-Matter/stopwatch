@@ -162,16 +162,7 @@
       text-overflow: ellipsis;
     }
 
-    .note-timer {
-      font-family: 'Chivo Mono', monospace;
-      font-size: 0.72rem;
-      color: #a1a1aa;
-      width: 3ch;
-      text-align: right;
-      flex-shrink: 0;
-    }
-
-    /* Right-side container holding the circle-tick button and remaining minutes */
+    /* Right-side container holding the heart button and fixed-width timer */
     .note-meta {
       display: flex;
       align-items: center;
@@ -212,6 +203,15 @@
     .note-tick.seen svg {
       fill: var(--accent-red);
       stroke: var(--accent-red);
+    }
+
+    .note-timer {
+      font-family: 'Chivo Mono', monospace;
+      font-size: 0.72rem;
+      color: #a1a1aa;
+      width: 3ch;
+      text-align: right;
+      flex-shrink: 0;
     }
 
     /* Clean Stopwatch Cards */
@@ -511,13 +511,11 @@
 
     // Show native system notification when app is open in foreground
     messaging.onMessage((payload) => {
-      const data = payload.data || payload.notification || {};
-      if (Notification.permission === 'granted' && data.title) {
-        new Notification(data.title, {
-          body: data.body || '',
+      if (Notification.permission === 'granted' && payload.notification) {
+        new Notification(payload.notification.title, {
+          body: payload.notification.body || '',
           badge: 'badge.png',
-          icon: 'transparent.png',
-          tag: data.tag || 'stopwatch4two-alert'
+          icon: 'transparent.png'
         });
       }
     });
@@ -683,7 +681,6 @@
           if (committed && WORKER_URL && !WORKER_URL.includes('YOUR_SUBDOMAIN')) {
             fetch(WORKER_URL, {
               method: 'POST',
-              keepalive: true,
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 type: 'overtake',
@@ -758,9 +755,8 @@
     });
 
     // =========================================================================
-    // 5. 30-MINUTE ILLUMINATED NOTES & PUSH NOTIFICATION DISPATCH
+    // 5. 30-MINUTE ILLUMINATED NOTES, HEART REACTION & LIVE 25-CHAR CLAMP
     // =========================================================================
-    // Toggles the green circle-tick state on an active 30-minute note
     function toggleNoteSeen(user) {
       const note = activeNotes[user];
       if (!note) return;
@@ -785,7 +781,7 @@
           btn.disabled = true;
           input.placeholder = `Locked (${minsLeft}m left)`;
 
-          // Reuse the existing DOM card so the CSS glow animation never resets
+          // Reuse existing DOM card so the 5.25s CSS glow animation never resets
           if (existingCard && existingCard.dataset.expiresAt === String(note.expiresAt)) {
             existingCard.querySelector('.note-timer').textContent = `${minsLeft}m`;
             const tickBtn = existingCard.querySelector('.note-tick');
@@ -835,7 +831,6 @@
           card.appendChild(content);
           card.appendChild(meta);
 
-          // Keep Pratishtha's note above Abhi's if both are active simultaneously
           if (user === 'userA' && stage.firstChild) {
             stage.insertBefore(card, stage.firstChild);
           } else {
@@ -856,7 +851,7 @@
 
     setInterval(updateNotesUI, 5000);
 
-    // Enforce 25-character limit live on every keystroke
+    // Enforce 25-character limit live on every keystroke (overrides Android IME composition buffering)
     document.querySelectorAll('.note-input').forEach((input) => {
       input.addEventListener('input', () => {
         const chars = Array.from(input.value);
@@ -890,7 +885,6 @@
       if (WORKER_URL && !WORKER_URL.includes('YOUR_SUBDOMAIN')) {
         fetch(WORKER_URL, {
           method: 'POST',
-          keepalive: true,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'note',
@@ -938,7 +932,7 @@
         accumulated: acc
       });
 
-      // Trigger "CAN'T LET 'USER' WIN!!" push alert only if:
+      // Trigger "they'd kill to see you fall" push alert only if:
       // 1. 30 minutes have passed since the last start alert
       // 2. The recipient's stopwatch is NOT already running
       const recipientUser = user === 'userA' ? 'userB' : 'userA';
@@ -949,7 +943,6 @@
         startCooldowns[user] = now;
         fetch(WORKER_URL, {
           method: 'POST',
-          keepalive: true,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: 'start',
