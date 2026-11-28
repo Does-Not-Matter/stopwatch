@@ -223,24 +223,24 @@
       text-align: center;
     }
 
-    /* Smooth transition and faint light-golden glow when both timers run together */
+    /* Smooth transition and slightly softer, warmer bright-gold glow when both timers run together */
     .card.stopwatch-card {
       transition: border-color 0.6s ease, box-shadow 0.6s ease, background 0.6s ease;
     }
 
     .container.both-running .card.stopwatch-card {
-      border-color: rgba(254, 232, 115, 0.26);
-      background: radial-gradient(circle at center, rgba(254, 232, 115, 0.055) 0%, var(--card-bg) 100%);
-      box-shadow: 0 0 26px rgba(254, 232, 115, 0.1), inset 0 0 14px rgba(254, 232, 115, 0.035);
+      border-color: rgba(255, 223, 89, 0.24);
+      background: radial-gradient(circle at center, rgba(255, 223, 89, 0.05) 0%, var(--card-bg) 100%);
+      box-shadow: 0 0 24px rgba(255, 223, 89, 0.092), inset 0 0 13px rgba(255, 223, 89, 0.032);
       animation: bothRunningGlow 5.25s ease-in-out infinite;
     }
 
     @keyframes bothRunningGlow {
       0%, 100% {
-        box-shadow: 0 0 22px rgba(254, 232, 115, 0.08), inset 0 0 12px rgba(254, 232, 115, 0.025);
+        box-shadow: 0 0 20px rgba(255, 223, 89, 0.074), inset 0 0 11px rgba(255, 223, 89, 0.023);
       }
       50% {
-        box-shadow: 0 0 32px rgba(254, 232, 115, 0.15), inset 0 0 18px rgba(254, 232, 115, 0.055);
+        box-shadow: 0 0 30px rgba(255, 223, 89, 0.138), inset 0 0 17px rgba(255, 223, 89, 0.05);
       }
     }
 
